@@ -1,4 +1,4 @@
-from sqlalchemy import Column,Integer,String,DateTime,Boolean,VARCHAR
+from sqlalchemy import Column,Integer,String,DateTime,Boolean,VARCHAR,ForeignKey,Numeric,Date
 from sqlalchemy.orm import declarative_base
 from datetime import datetime
 from app.database.base import Base
@@ -34,44 +34,41 @@ class User(Base):
     )
 
 
-    class Expense(Base):
-    __tablename__ = "expense"
+class Expense(Base):
+        __tablename__ = "expense"
 
-    id = Column(
-        Integer,
-        primary_key=True,
-        index=True,
-        autoincrement=True
-    )
+        id = Column(Integer,primary_key=True, index=True,
+            autoincrement=True
+        )
 
-    user_id = Column(
-        Integer,
-        ForeignKey("user.id"),
-        nullable=False,
-        index=True
-    )
+        user_id = Column(
+            Integer,
+            ForeignKey("user.id"),
+            nullable=False,
+            index=True
+        )
 
-    amount = Column(
-        Numeric(10, 2),
-        nullable=False
-    )
+        amount = Column(
+            Numeric(10, 2),
+            nullable=False
+        )
 
-    category = Column(
-        String(100),
-        nullable=False
-    )
+        category = Column(
+            String(100),
+            nullable=False
+        )
 
-    description = Column(
-        String(500),
-        nullable=True
-    )
+        description = Column(
+            String(500),
+            nullable=True
+        )
 
-    expense_date = Column(Date,
-        nullable=False
-    )
+        expense_date = Column(Date,
+            nullable=False
+        )
 
-    created_at = Column(
-        DateTime,
-        nullable=False,
-        default=datetime.now
-    )
+        created_at = Column(
+            DateTime,
+            nullable=False,
+            default=datetime.now
+        )
