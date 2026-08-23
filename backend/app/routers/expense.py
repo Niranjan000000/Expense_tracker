@@ -6,6 +6,12 @@ from datetime import date
 from app.database.connection import get_db
 from app.database.models import Expense
 from app.schemas.expense import (ExpenseCreate,ExpenseResponse,ExpenseUpdate)
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+from app.schemas.summary import (
+    ExpenseSummary,
+    CategorySummary,MonthlySummary
+)
 from app.utils.security import (
     get_current_user,
     oauth_2_scheme
@@ -120,18 +126,17 @@ def get_expenses(
         token
     )
 
-    # Start with only current user's expenses
     query = db.query(Expense).filter(
         Expense.user_id == current_user.id
     )
 
-    # Category filter
+
     if category:
         query = query.filter(
             Expense.category == category
         )
 
-    # Description search
+   
     if search:
         query = query.filter(
             Expense.description.ilike(
@@ -139,25 +144,25 @@ def get_expenses(
             )
         )
 
-    # Start date
+
     if start_date:
         query = query.filter(
             Expense.expense_date >= start_date
         )
 
-    # End date
+
     if end_date:
         query = query.filter(
             Expense.expense_date <= end_date
         )
 
-    # Minimum amount
+
     if min_amount is not None:
         query = query.filter(
             Expense.amount >= min_amount
         )
 
-    # Maximum amount
+
     if max_amount is not None:
         query = query.filter(
             Expense.amount <= max_amount
@@ -166,6 +171,125 @@ def get_expenses(
     expenses = query.all()
 
     return expenses
+
+
+@router.get(
+    "/summary",
+    response_model=ExpenseSummary
+)
+def get_expense_summary(
+    credentials: HTTPAuthorizationCredentials = Depends(
+        oauth_2_scheme
+    ),
+    db: Session = Depends(get_db)
+):
+
+    token = credentials.credentials
+
+    current_user = get_current_user(
+        db,
+        token
+    )
+
+    total_expenses = db.query(
+        func.count(Expense.id)
+    ).filter(
+        Expense.user_id == current_user.id
+    ).scalar()
+
+    total_amount = db.query(
+        func.coalesce(func.sum(Expense.amount), 0)
+    ).filter(
+        Expense.user_id == current_user.id
+    ).scalar()
+
+    return {
+        "total_expenses": total_expenses,
+        "total_amount": total_amount
+    }
+
+
+@router.get(
+    "/summary/category",
+    response_model=list[CategorySummary]
+)
+def get_category_summary(
+    credentials: HTTPAuthorizationCredentials = Depends(
+        oauth_2_scheme
+    ),
+    db: Session = Depends(get_db)
+):
+
+    token = credentials.credentials
+
+    current_user = get_current_user(
+        db,
+        token
+    )
+
+    results = db.query(
+        Expense.category,
+        func.sum(Expense.amount).label("total")
+    ).filter(
+        Expense.user_id == current_user.id
+    ).group_by(
+        Expense.category
+    ).all()
+
+    return [
+        {
+            "category": category,
+            "total": total
+        }
+        for category, total in results
+    ]
+
+
+@router.get(
+    "/summary/monthly",
+    response_model=list[MonthlySummary]
+)
+def get_monthly_summary(
+    credentials: HTTPAuthorizationCredentials = Depends(
+        oauth_2_scheme
+    ),
+    db: Session = Depends(get_db)
+):
+
+    token = credentials.credentials
+
+    current_user = get_current_user(
+        db,
+        token
+    )
+
+    results = db.query(
+        func.date_format(
+            Expense.expense_date,
+            "%Y-%m"
+        ).label("month"),
+        func.sum(Expense.amount).label("total")
+    ).filter(
+        Expense.user_id == current_user.id
+    ).group_by(
+        func.date_format(
+            Expense.expense_date,
+            "%Y-%m"
+        )
+    ).order_by(
+        func.date_format(
+            Expense.expense_date,
+            "%Y-%m"
+        )
+    ).all()
+
+    return [
+        {
+            "month": month,
+            "total": total
+        }
+        for month, total in results
+    ]
 
 
 @router.get(
