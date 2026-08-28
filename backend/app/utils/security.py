@@ -1,18 +1,27 @@
 from datetime import datetime, timedelta, timezone
 
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-
+from fastapi.security import HTTPAuthorizationCredentials
+from fastapi.security import HTTPBearer
 from app.database.models import User
 from dotenv import load_dotenv
 import os
+from fastapi.security import OAuth2PasswordBearer
+
+oauth_2_scheme = OAuth2PasswordBearer(
+    tokenUrl="/auth/token"
+)
 
 load_dotenv()
 
 
 pwd_context=CryptContext(schemes=["bcrypt"],deprecated="auto")
-oauth_2_scheme = HTTPBearer()
+
+oauth_2_scheme = OAuth2PasswordBearer(
+    tokenUrl="/auth/token"
+)
 
 
 SECRET_KEY = os.getenv("SECRET_KEY")
@@ -73,9 +82,8 @@ def create_access_token(
 
 def get_current_user(db, token: str):
 
-    credentials_exception = Exception(
-        "Could not validate credentials"
-    )
+    print("TOKEN TYPE:", type(token))
+    print("TOKEN RECEIVED:", bool(token))
 
     try:
 
@@ -85,22 +93,29 @@ def get_current_user(db, token: str):
             algorithms=[ALGORITHM]
         )
 
-        user_id = payload.get("sub")
+        print("PAYLOAD:", payload)
 
-        if user_id is None:
-            raise credentials_exception
+    except Exception as e:
 
-        user_id = int(user_id)
+        print("JWT DECODE ERROR:", repr(e))
+        raise e
 
-    except (JWTError, ValueError):
+    user_id = payload.get("sub")
 
-        raise credentials_exception
+    print("SUB:", user_id)
+
+    if user_id is None:
+        raise Exception("SUB is missing")
+
+    user_id = int(user_id)
 
     user = db.query(User).filter(
-        User.id == user_id ).first()
+        User.id == user_id
+    ).first()
+
+    print("USER:", user)
 
     if user is None:
-        raise credentials_exception
+        raise Exception("User not found")
 
     return user
-

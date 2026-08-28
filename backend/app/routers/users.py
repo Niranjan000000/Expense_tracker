@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.database.connection import get_db
 
 from app.schemas.user import userresponse,UserCreate
-from fastapi.security import HTTPAuthorizationCredentials
+
 
 from app.utils.security import (
     oauth_2_scheme,
@@ -18,14 +18,16 @@ router = APIRouter(
 )
 
 
-@router.get("/me", response_model=userresponse)
+@router.get(
+    "/me",
+    response_model=userresponse
+)
 def get_my_profile(
-    credentials: HTTPAuthorizationCredentials = Depends(oauth_2_scheme),
+    token: str = Depends(oauth_2_scheme),
     db: Session = Depends(get_db)
 ):
-    try:
-        token = credentials.credentials
 
+    try:
         user = get_current_user(
             db,
             token

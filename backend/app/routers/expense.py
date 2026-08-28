@@ -1,17 +1,24 @@
-from fastapi import APIRouter, Depends, HTTPException, status,Query
-from fastapi.security import HTTPAuthorizationCredentials
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from decimal import Decimal
 from datetime import date
+
 from app.database.connection import get_db
 from app.database.models import Expense
-from app.schemas.expense import (ExpenseCreate,ExpenseResponse,ExpenseUpdate)
-from sqlalchemy import func
-from sqlalchemy.orm import Session
+
+from app.schemas.expense import (
+    ExpenseCreate,
+    ExpenseResponse,
+    ExpenseUpdate
+)
+
 from app.schemas.summary import (
     ExpenseSummary,
-    CategorySummary,MonthlySummary
+    CategorySummary,
+    MonthlySummary
 )
+
 from app.utils.security import (
     get_current_user,
     oauth_2_scheme
@@ -24,6 +31,7 @@ router = APIRouter(
 )
 
 
+
 @router.post(
     "",
     response_model=ExpenseResponse,
@@ -31,13 +39,9 @@ router = APIRouter(
 )
 def create_expense(
     expense_data: ExpenseCreate,
-    credentials: HTTPAuthorizationCredentials = Depends(
-        oauth_2_scheme
-    ),
+    token: str = Depends(oauth_2_scheme),
     db: Session = Depends(get_db)
 ):
-
-    token = credentials.credentials
 
     current_user = get_current_user(
         db,
@@ -59,45 +63,6 @@ def create_expense(
     return new_expense
 
 
-
-router = APIRouter(
-    prefix="/expenses",
-    tags=["Expenses"]
-)
-
-@router.post(
-    "",
-    response_model=ExpenseResponse,
-    status_code=status.HTTP_201_CREATED
-)
-def create_expense(
-    expense_data: ExpenseCreate,
-    credentials: HTTPAuthorizationCredentials = Depends(
-        oauth_2_scheme
-    ),
-    db: Session = Depends(get_db)
-):
-
-    token = credentials.credentials
-
-    current_user = get_current_user(
-        db,
-        token
-    )
-
-    new_expense = Expense(
-        user_id=current_user.id,
-        amount=expense_data.amount,
-        category=expense_data.category,
-        description=expense_data.description,
-        expense_date=expense_data.expense_date
-    )
-
-    db.add(new_expense)
-    db.commit()
-    db.refresh(new_expense)
-
-    return new_expense
 
 
 @router.get(
@@ -112,14 +77,9 @@ def get_expenses(
     min_amount: Decimal | None = Query(default=None),
     max_amount: Decimal | None = Query(default=None),
 
-    credentials: HTTPAuthorizationCredentials = Depends(
-        oauth_2_scheme
-    ),
-
+    token: str = Depends(oauth_2_scheme),
     db: Session = Depends(get_db)
 ):
-
-    token = credentials.credentials
 
     current_user = get_current_user(
         db,
@@ -130,13 +90,13 @@ def get_expenses(
         Expense.user_id == current_user.id
     )
 
-
+    # Category filter
     if category:
         query = query.filter(
             Expense.category == category
         )
 
-   
+    # Description search
     if search:
         query = query.filter(
             Expense.description.ilike(
@@ -144,25 +104,25 @@ def get_expenses(
             )
         )
 
-
+    # Start date
     if start_date:
         query = query.filter(
             Expense.expense_date >= start_date
         )
 
-
+    # End date
     if end_date:
         query = query.filter(
             Expense.expense_date <= end_date
         )
 
-
+    # Minimum amount
     if min_amount is not None:
         query = query.filter(
             Expense.amount >= min_amount
         )
 
-
+    # Maximum amount
     if max_amount is not None:
         query = query.filter(
             Expense.amount <= max_amount
@@ -173,18 +133,15 @@ def get_expenses(
     return expenses
 
 
+
 @router.get(
     "/summary",
     response_model=ExpenseSummary
 )
 def get_expense_summary(
-    credentials: HTTPAuthorizationCredentials = Depends(
-        oauth_2_scheme
-    ),
+    token: str = Depends(oauth_2_scheme),
     db: Session = Depends(get_db)
 ):
-
-    token = credentials.credentials
 
     current_user = get_current_user(
         db,
@@ -198,7 +155,10 @@ def get_expense_summary(
     ).scalar()
 
     total_amount = db.query(
-        func.coalesce(func.sum(Expense.amount), 0)
+        func.coalesce(
+            func.sum(Expense.amount),
+            0
+        )
     ).filter(
         Expense.user_id == current_user.id
     ).scalar()
@@ -209,18 +169,16 @@ def get_expense_summary(
     }
 
 
+
+
 @router.get(
     "/summary/category",
     response_model=list[CategorySummary]
 )
 def get_category_summary(
-    credentials: HTTPAuthorizationCredentials = Depends(
-        oauth_2_scheme
-    ),
+    token: str = Depends(oauth_2_scheme),
     db: Session = Depends(get_db)
 ):
-
-    token = credentials.credentials
 
     current_user = get_current_user(
         db,
@@ -229,7 +187,9 @@ def get_category_summary(
 
     results = db.query(
         Expense.category,
-        func.sum(Expense.amount).label("total")
+        func.sum(
+            Expense.amount
+        ).label("total")
     ).filter(
         Expense.user_id == current_user.id
     ).group_by(
@@ -245,18 +205,16 @@ def get_category_summary(
     ]
 
 
+
+
 @router.get(
     "/summary/monthly",
     response_model=list[MonthlySummary]
 )
 def get_monthly_summary(
-    credentials: HTTPAuthorizationCredentials = Depends(
-        oauth_2_scheme
-    ),
+    token: str = Depends(oauth_2_scheme),
     db: Session = Depends(get_db)
 ):
-
-    token = credentials.credentials
 
     current_user = get_current_user(
         db,
@@ -268,7 +226,11 @@ def get_monthly_summary(
             Expense.expense_date,
             "%Y-%m"
         ).label("month"),
-        func.sum(Expense.amount).label("total")
+
+        func.sum(
+            Expense.amount
+        ).label("total")
+
     ).filter(
         Expense.user_id == current_user.id
     ).group_by(
@@ -292,19 +254,16 @@ def get_monthly_summary(
     ]
 
 
+
 @router.get(
     "/{expense_id}",
     response_model=ExpenseResponse
 )
 def get_expense(
     expense_id: int,
-    credentials: HTTPAuthorizationCredentials = Depends(
-        oauth_2_scheme
-    ),
+    token: str = Depends(oauth_2_scheme),
     db: Session = Depends(get_db)
 ):
-
-    token = credentials.credentials
 
     current_user = get_current_user(
         db,
@@ -325,6 +284,7 @@ def get_expense(
     return expense
 
 
+
 @router.put(
     "/{expense_id}",
     response_model=ExpenseResponse
@@ -332,13 +292,9 @@ def get_expense(
 def update_expense(
     expense_id: int,
     expense_data: ExpenseUpdate,
-    credentials: HTTPAuthorizationCredentials = Depends(
-        oauth_2_scheme
-    ),
+    token: str = Depends(oauth_2_scheme),
     db: Session = Depends(get_db)
 ):
-
-    token = credentials.credentials
 
     current_user = get_current_user(
         db,
@@ -374,136 +330,15 @@ def update_expense(
     return expense
 
 
-@router.delete(
-    "/{expense_id}"
-)
-def delete_expense(
-    expense_id: int,
-    credentials: HTTPAuthorizationCredentials = Depends(
-        oauth_2_scheme
-    ),
-    db: Session = Depends(get_db)
-):
-
-    token = credentials.credentials
-
-    current_user = get_current_user(
-        db,
-        token
-    )
-
-    expense = db.query(Expense).filter(
-        Expense.id == expense_id,
-        Expense.user_id == current_user.id
-    ).first()
-
-    if not expense:
-        raise HTTPException(
-            status_code=404,
-            detail="Expense not found"
-        )
-
-    db.delete(expense)
-    db.commit()
-
-    return {
-        "message": "Expense deleted successfully"
-    }
-
-
-
-@router.get(
-    "/{expense_id}",
-    response_model=ExpenseResponse
-)
-def get_expense(
-    expense_id: int,
-    credentials: HTTPAuthorizationCredentials = Depends(
-        oauth_2_scheme
-    ),
-    db: Session = Depends(get_db)
-):
-
-    token = credentials.credentials
-
-    current_user = get_current_user(
-        db,
-        token
-    )
-
-    expense = db.query(Expense).filter(
-        Expense.id == expense_id,
-        Expense.user_id == current_user.id
-    ).first()
-
-    if not expense:
-        raise HTTPException(
-            status_code=404,
-            detail="Expense not found"
-        )
-
-    return expense
-
-@router.put(
-    "/{expense_id}",
-    response_model=ExpenseResponse
-)
-def update_expense(
-    expense_id: int,
-    expense_data: ExpenseUpdate,
-    credentials: HTTPAuthorizationCredentials = Depends(
-        oauth_2_scheme
-    ),
-    db: Session = Depends(get_db)
-):
-
-    token = credentials.credentials
-
-    current_user = get_current_user(
-        db,
-        token
-    )
-
-    expense = db.query(Expense).filter(
-        Expense.id == expense_id,
-        Expense.user_id == current_user.id
-    ).first()
-
-    if not expense:
-        raise HTTPException(
-            status_code=404,
-            detail="Expense not found"
-        )
-
-    if expense_data.amount is not None:
-        expense.amount = expense_data.amount
-
-    if expense_data.category is not None:
-        expense.category = expense_data.category
-
-    if expense_data.description is not None:
-        expense.description = expense_data.description
-
-    if expense_data.expense_date is not None:
-        expense.expense_date = expense_data.expense_date
-
-    db.commit()
-    db.refresh(expense)
-
-    return expense
 
 @router.delete(
     "/{expense_id}"
 )
 def delete_expense(
     expense_id: int,
-    credentials: HTTPAuthorizationCredentials = Depends(
-        oauth_2_scheme
-    ),
+    token: str = Depends(oauth_2_scheme),
     db: Session = Depends(get_db)
 ):
-
-    token = credentials.credentials
 
     current_user = get_current_user(
         db,
